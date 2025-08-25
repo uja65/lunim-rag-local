@@ -1,5 +1,5 @@
 # Lunim Case Study RAG Assistant (Local, One-Day Prototype)
-
+vercel link: https://lunim-rag-local-a8xc.vercel.app/
 ## Why
 Exploring Lunim’s case studies currently requires manual reading. A retrieval-augmented assistant lets prospects and new team members **query the portfolio instantly**, improving discovery and reducing bounce.
 
