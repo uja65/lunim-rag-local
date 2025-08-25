@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type DocMeta = {
   id: string;
@@ -23,7 +23,7 @@ export default function Page() {
   const [messages, setMessages] = useState<Msg[]>([
     {
       role: "assistant",
-      text: "Hi! I’m the Lunim Case Study Assistant.\nUse the filters to narrow by theme.",
+      text: "Hi! I’m the Lunim Case Study Assistant. \nUse the filters to narrow by theme.",
     },
   ]);
 
@@ -39,19 +39,27 @@ export default function Page() {
     [filters]
   );
   const [busy, setBusy] = useState(false);
+  const endRef = useRef<HTMLDivElement>(null);
 
   // Fetch docs metadata for sidebar
   useEffect(() => {
     (async () => {
       try {
         const r = await fetch("/api/docs");
-        const j = await r.json();
+        const j = (await r.json()) as { docs?: DocMeta[] };
         setDocs(j.docs || []);
+      } catch {
+        // ignore for sidebar
       } finally {
         setLoadingDocs(false);
       }
     })();
   }, []);
+
+  // Autoscroll chat to bottom
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, busy]);
 
   // Call /api/ask with question + filters; mode optional ("summary")
   async function ask(mode?: "summary") {
@@ -66,16 +74,31 @@ export default function Page() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ question: q, filters: activeFilters, mode }),
       });
-      const j = await r.json();
-      if (j.error) throw new Error(j.error);
+      const j: unknown = await r.json();
+
+      if (
+        typeof j === "object" &&
+        j !== null &&
+        "error" in j &&
+        typeof (j as { error: unknown }).error === "string"
+      ) {
+        throw new Error((j as { error: string }).error);
+      }
+
+      const payload = j as { answer?: string; sources?: { title: string; url: string }[] };
       setMessages((m) => [
         ...m,
-        { role: "assistant", text: j.answer, sources: j.sources },
+        {
+          role: "assistant",
+          text: payload.answer ?? "(no answer)",
+          sources: payload.sources ?? [],
+        },
       ]);
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
       setMessages((m) => [
         ...m,
-        { role: "assistant", text: "Error: " + (e?.message || "unknown") },
+        { role: "assistant", text: "Error: " + msg },
       ]);
     } finally {
       setBusy(false);
@@ -139,61 +162,27 @@ export default function Page() {
         </aside>
 
         {/* Chat panel */}
-        <section className="bg-white rounded-xl shadow p-0 flex flex-col">
-          {/* Input row on TOP, sticky */}
-          <div className="sticky top-0 z-10 bg-white border-b px-4 py-3">
-            <div className="flex gap-2">
-              <input
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && ask()}
-                className="flex-1 border border-neutral-300 rounded-lg px-3 py-2 text-sm
-                           bg-white text-neutral-900 placeholder:text-neutral-500"
-                placeholder="Ask about Lunim’s case studies…"
-              />
-              <button
-                onClick={() => ask()}
-                disabled={busy}
-                className="px-3 py-2 text-sm rounded-lg bg-black text-white disabled:opacity-50"
-              >
-                Ask
-              </button>
-              <button
-                onClick={() => ask("summary")}
-                disabled={busy || !question.trim()}
-                className="px-3 py-2 text-sm rounded-lg border border-neutral-300 text-neutral-900"
-                title="Summarize the best-matching case study for this query"
-              >
-                Summarize
-              </button>
-            </div>
-          </div>
-
-          {/* Messages BELOW, newest at the top */}
-          <div className="flex-1 overflow-y-auto px-4 py-4">
-            <div className="flex flex-col-reverse gap-4">
-              {busy && (
-                <div className="text-sm text-neutral-500">Thinking…</div>
-              )}
-              {messages.map((m, i) => (
-                <div key={i}>
-                  <div
-                    className={
-                      m.role === "user"
-                        ? "bg-blue-600 text-white border border-blue-700 rounded-lg p-3"
-                        : "bg-white text-neutral-900 border border-neutral-200 rounded-lg p-3"
-                    }
-                  >
-                    <pre className="whitespace-pre-wrap text-sm leading-relaxed">
-                      {m.text}
-                    </pre>
-                    {!!m.sources?.length && (
-                      <div className="mt-2 text-xs text-neutral-700">
-                        Sources:&nbsp;
-                        {m.sources
-                          .map((s, idx) => (
+        <section className="bg-white rounded-xl shadow p-4 flex flex-col">
+          <div className="flex-1 overflow-y-auto pr-1">
+            {messages.map((m, i) => (
+              <div key={i} className="mb-4">
+                <div
+                  className={
+                    m.role === "user"
+                      ? "bg-blue-600 text-white border border-blue-700 rounded-lg p-3"
+                      : "bg-white text-neutral-900 border border-neutral-200 rounded-lg p-3"
+                  }
+                >
+                  <pre className="whitespace-pre-wrap text-sm leading-relaxed">
+                    {m.text}
+                  </pre>
+                  {!!m.sources?.length && (
+                    <div className="mt-2 text-xs text-neutral-700">
+                      <span>Sources: </span>
+                      <span>
+                        {m.sources.map((s, idx) => (
+                          <span key={s.url}>
                             <a
-                              key={idx}
                               href={s.url}
                               target="_blank"
                               rel="noreferrer"
@@ -201,14 +190,44 @@ export default function Page() {
                             >
                               {s.title}
                             </a>
-                          ))
-                          .reduce((prev, curr) => [prev, " • ", curr] as any)}
-                      </div>
-                    )}
-                  </div>
+                            {idx < (m.sources?.length ?? 0) - 1 ? (
+                              <span> • </span>
+                            ) : null}
+                          </span>
+                        ))}
+                      </span>
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
+            {busy && <div className="text-sm text-neutral-500">Thinking…</div>}
+            <div ref={endRef} />
+          </div>
+
+          <div className="mt-3 flex gap-2">
+            <input
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && ask()}
+              className="flex-1 border rounded-lg px-3 py-2 text-sm bg-white text-neutral-900 placeholder:text-neutral-500"
+              placeholder="Ask about Lunim’s case studies…"
+            />
+            <button
+              onClick={() => ask()}
+              disabled={busy}
+              className="px-3 py-2 text-sm rounded-lg bg-black text-white disabled:opacity-50"
+            >
+              Ask
+            </button>
+            <button
+              onClick={() => ask("summary")}
+              disabled={busy || !question.trim()}
+              className="px-3 py-2 text-sm rounded-lg border"
+              title="Summarize the best-matching case study for this query"
+            >
+              Summarize
+            </button>
           </div>
         </section>
       </main>
