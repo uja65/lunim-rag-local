@@ -8,7 +8,7 @@ A **RAG chatbot** that answers questions like:
 - “Which case study shows Web3 implementation?”
 - “Summarise the AI-related work Lunim did in 2 sentences.”
 
-It runs **fully locally for embeddings** (no credits) using `@xenova/transformers`, retrieves the most relevant case-study chunks, and generates a concise answer (via a local LLM with Ollama or an extractive fallback).
+It runs **fully locally for embeddings** (no credits) using `@xenova/transformers`, retrieves the most relevant case-study chunks, and generates a concise answer.
 
 ## Who
 - **Prospective clients** evaluating Lunim’s capabilities.
